@@ -1,0 +1,534 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⚡ 專業賓果教學系統 - 離線預設旗艦版 v7.6</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Sortable/1.15.0/Sortable.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap');
+        
+        body {
+            font-family: 'Noto Sans TC', sans-serif;
+            background-color: #f1f5f9;
+            user-select: none;
+        }
+
+        .bingo-grid {
+            display: grid;
+            gap: 12px;
+            width: 100%;
+            max-width: 1000px;
+            margin: 0 auto;
+        }
+
+        .bingo-cell {
+            aspect-ratio: 1 / 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 12px;
+            background: white;
+            border: 4px solid #e2e8f0;
+            border-radius: 20px;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1);
+        }
+
+        .bingo-cell:hover {
+            transform: translateY(-4px);
+            border-color: #3b82f6;
+            box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1);
+        }
+
+        .bingo-cell.marked {
+            background-color: #dcfce7;
+            border-color: #22c55e;
+        }
+
+        .check-mark {
+            display: none;
+            position: absolute;
+            top: 5px;
+            right: 8px;
+            font-size: 2.5rem;
+            color: #16a34a;
+            font-weight: 900;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .bingo-cell.marked .check-mark {
+            display: block;
+        }
+
+        @keyframes modalPop {
+            0% { opacity: 0; transform: scale(0.95); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .animate-modal { animation: modalPop 0.2s ease-out forwards; }
+
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; padding: 0; }
+            .bingo-cell { border: 2px solid #000; border-radius: 0; box-shadow: none; }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8 min-h-screen">
+
+    <div id="app" class="max-w-7xl mx-auto">
+        <!-- 控制列 -->
+        <header class="flex flex-col xl:flex-row justify-between items-start xl:items-center mb-8 no-print bg-white p-6 rounded-3xl shadow-sm gap-6 border border-slate-100">
+            <div class="flex-1">
+                <h1 class="text-2xl font-black text-slate-800 flex items-center gap-2">
+                    ⚡ 科技實作賓果教學系統 <span class="text-blue-600 text-xs bg-blue-50 px-2 py-1 rounded-full">v7.6 (即時隨機版)</span>
+                </h1>
+                <div class="flex flex-wrap items-center gap-6 mt-4">
+                    <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-xl">
+                        <span class="text-sm font-bold text-slate-500">規格</span>
+                        <select id="gridSize" onchange="generateBoard()" class="bg-transparent border-none font-bold outline-none cursor-pointer">
+                            <option value="3">3 x 3</option>
+                            <option value="4">4 x 4</option>
+                            <option value="5" selected>5 x 5</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-2 bg-slate-50 p-2 rounded-xl">
+                        <span class="text-sm font-bold text-slate-500">排序</span>
+                        <select id="sortMode" onchange="generateBoard()" class="bg-transparent border-none font-bold outline-none cursor-pointer">
+                            <option value="random">隨機打散</option>
+                            <option value="ordered">依題號排序</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-3 min-w-[200px]">
+                        <span class="text-xs font-bold text-blue-500 bg-blue-50 px-2 py-0.5 rounded">編號+主題</span>
+                        <input type="range" id="idSizeSlider" min="10" max="45" value="16" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                    </div>
+                    <div class="flex items-center gap-3 min-w-[200px]">
+                        <span class="text-xs font-bold text-slate-400">細節內容</span>
+                        <input type="range" id="cellSizeSlider" min="16" max="60" value="28" class="w-full h-1.5 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-blue-600">
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex flex-wrap gap-3">
+                <button onclick="toggleEditor()" class="bg-slate-800 text-white px-6 py-3 rounded-2xl font-bold hover:bg-black transition flex items-center gap-2">
+                    ⚙️ 題庫圖書館
+                </button>
+                <button onclick="confirmReset()" class="bg-rose-50 text-rose-600 px-6 py-3 rounded-2xl font-bold hover:bg-rose-100 transition">
+                    🔄 重置勾勾
+                </button>
+                <button onclick="generateBoard()" class="bg-blue-600 text-white px-8 py-3 rounded-2xl font-black hover:bg-blue-700 shadow-lg shadow-blue-200 transition">
+                    🎲 重新出題
+                </button>
+            </div>
+        </header>
+
+        <!-- 賓果主盤面 -->
+        <main class="flex justify-center mb-12">
+            <div id="bingoBoard" class="bingo-grid"></div>
+        </main>
+
+        <!-- 答題彈窗 -->
+        <div id="questionModal" class="fixed inset-0 bg-slate-900/90 backdrop-blur-md z-50 hidden flex items-center justify-center p-4 no-print">
+            <div class="bg-white w-full max-w-6xl rounded-[40px] shadow-2xl overflow-hidden animate-modal border-4 border-slate-200 relative">
+                <div class="p-8 bg-slate-50 border-b-2 flex justify-between items-center">
+                    <span id="modalCategory" class="text-2xl font-black text-blue-600">分類名稱</span>
+                    <button onclick="closeModal()" class="text-slate-400 hover:text-slate-600 text-5xl font-light">&times;</button>
+                </div>
+                <div class="p-16 text-center">
+                    <div id="modalQuestion" class="text-[40px] font-black leading-[1.3] text-slate-800 px-10"></div>
+                    <div id="optionsContainer" class="mt-10 mb-10"></div>
+                    <div id="answerArea" class="hidden opacity-0 transition-opacity duration-300">
+                        <div class="inline-block bg-emerald-500 text-white text-[42px] font-black px-16 py-6 rounded-[30px] shadow-2xl mb-10">
+                            <span id="modalAnswer"></span>
+                        </div>
+                    </div>
+                    <div class="mt-10 flex flex-wrap justify-center gap-6">
+                        <button id="showAnsBtn" onclick="showAnswer()" class="bg-slate-800 text-white px-10 py-5 rounded-3xl text-2xl font-black hover:bg-black transition">👀 顯示正確答案</button>
+                        <button onclick="markCell(true)" class="bg-emerald-600 text-white px-10 py-5 rounded-3xl text-2xl font-black hover:bg-emerald-700 transition">✅ 答對標記</button>
+                        <button onclick="markCell(false)" class="bg-rose-100 text-rose-700 px-10 py-5 rounded-3xl text-2xl font-black hover:bg-rose-200 transition">❌ 取消標記</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 題庫管理後台 -->
+        <div id="editorModal" class="fixed inset-0 bg-white z-[60] hidden flex flex-col no-print">
+            <nav class="p-6 border-b flex justify-between items-center bg-slate-900 text-white">
+                <div class="flex items-center gap-4">
+                    <h2 class="text-2xl font-black">⚙️ 題庫圖書館管理</h2>
+                    <div class="h-8 w-px bg-slate-700"></div>
+                    <div class="flex items-center bg-slate-800 rounded-xl px-4 py-1 border border-slate-700">
+                        <span class="text-xs mr-2 text-slate-400 uppercase">當前題組：</span>
+                        <input type="text" id="currentSetName" value="電流急急棒旗艦題組" class="bg-transparent font-bold outline-none text-blue-400 w-48">
+                        <button onclick="saveToLibrary()" class="ml-4 text-xs bg-blue-600 text-white px-3 py-1.5 rounded-lg hover:bg-blue-500 transition font-bold">💾 儲存</button>
+                    </div>
+                </div>
+                <div class="flex gap-4 items-center">
+                    <div class="flex items-center gap-2">
+                        <select id="librarySelect" class="bg-slate-800 text-sm rounded-xl px-4 py-2 border border-slate-700 outline-none text-blue-200">
+                            <option value="">-- 我的題庫清單 --</option>
+                        </select>
+                        <button onclick="loadFromLibraryBtn()" class="bg-indigo-600 px-4 py-2 rounded-xl text-sm font-bold hover:bg-indigo-500 transition">📂 載入</button>
+                        <button onclick="deleteFromLibraryBtn()" class="bg-rose-900/50 text-rose-300 border border-rose-800 px-4 py-2 rounded-xl text-sm font-bold hover:bg-rose-800 transition">🗑️ 刪除</button>
+                    </div>
+                    <button onclick="saveAndClose()" class="bg-emerald-600 px-8 py-2 rounded-xl text-lg font-bold hover:bg-emerald-500 transition">確認變更並離開</button>
+                </div>
+            </nav>
+            <div id="editorList" class="flex-1 overflow-y-auto p-8 space-y-4 bg-slate-50"></div>
+            <div class="p-4 border-t bg-white flex justify-between items-center px-8">
+                <button onclick="restoreDefault()" class="text-rose-500 text-xs font-bold border border-rose-100 px-4 py-2 rounded-lg hover:bg-rose-50 transition">⚠️ 恢復預設題庫</button>
+                <button onclick="addNewCat()" class="bg-slate-100 text-slate-600 px-8 py-3 rounded-xl font-bold hover:bg-slate-200 transition">+ 手動新增分類</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 預設 25 組分類題庫 (符合 9元件, 7工具, 實作與安全)
+        const MASTER_TOPICS = [
+            // --- 元件類 (9格) ---
+            { id: 1, name: "元件1：3號電池", questions: [
+                { type: "問答", q: "一般 3 號電池的電壓通常是多少伏特(V)？", a: "1.5V" },
+                { type: "是非", q: "[是非] 電池凸點的一端通常是負極？", a: "X" },
+                { type: "選擇", q: "[選擇] 兩顆 1.5V 電池「串聯」後的總電壓是？", a: "A: 3.0V :B: 1.5V", realA: "A: 3.0V" }
+            ]},
+            { id: 2, name: "元件2：船型開關", questions: [
+                { type: "問答", q: "船型開關的主要作用是控制電路的什麼？", a: "導通與斷開" },
+                { type: "是非", q: "[是非] 開關切換到標示「O」的位置代表電路接通？", a: "X" },
+                { type: "選擇", q: "[選擇] 開關通常串聯在電路中哪一極？", a: "A: 正極 :B: 負極都可以", realA: "A: 正極" }
+            ]},
+            { id: 3, name: "元件3：按壓開關", questions: [
+                { type: "問答", q: "按壓開關通常是手按下去才導通，放手後會？", a: "自動彈回斷開" },
+                { type: "是非", q: "[是非] 按壓開關可以用來模擬急急棒碰觸路徑的動作？", a: "O" },
+                { type: "選擇", q: "[選擇] 手按下去才導通的開關稱為？", a: "A: 常開型 :B: 常閉型", realA: "A: 常開型" }
+            ]},
+            { id: 4, name: "元件4：有源蜂鳴器", questions: [
+                { type: "問答", q: "有源蜂鳴器長腳應接在電池的哪一個極性？", a: "正極" },
+                { type: "是非", q: "[是非] 蜂鳴器是一種將電能轉換成聲能的元件？", a: "O" },
+                { type: "選擇", q: "[選擇] 蜂鳴器如果正負極接反會？", a: "A: 不會響 :B: 變更大聲", realA: "A: 不會響" }
+            ]},
+            { id: 5, name: "元件5：繼電器", questions: [
+                { type: "問答", q: "繼電器是一種利用小電流控制什麼的自動開關？", a: "大電流(或另一個電路)" },
+                { type: "是非", q: "[是非] 繼電器運作時會發出輕微的「喀」聲？", a: "O" },
+                { type: "選擇", q: "[選擇] 繼電器是利用什麼原理工作的？", a: "A: 電磁感應 :B: 太陽能", realA: "A: 電磁感應" }
+            ]},
+            { id: 6, name: "元件6：電阻", questions: [
+                { type: "問答", q: "在電路中加入電阻，主要目的是為了限制什麼？", a: "電流大小" },
+                { type: "是非", q: "[是非] 電阻的數值越大，通過的電流也會隨之變大？", a: "X" },
+                { type: "選擇", q: "[選擇] 電阻的測量單位是？", a: "A: 歐姆(Ω) :B: 伏特(V)", realA: "A: 歐姆(Ω)" }
+            ]},
+            { id: 7, name: "元件7：LED燈珠", questions: [
+                { type: "問答", q: "發光二極體(LED)具有極性，長腳端代表什麼極？", a: "正極" },
+                { type: "是非", q: "[是非] LED 燈珠可以直接接 110V 插座使用？", a: "X" },
+                { type: "選擇", q: "[選擇] 為保護 LED，通常會在電路中串聯一個？", a: "A: 電阻 :B: 導線", realA: "A: 電阻" }
+            ]},
+            { id: 8, name: "元件8：導線", questions: [
+  { type: "問答", q: "單心線外層通常包覆塑膠，其主要作用是什麼？", a: "絕緣（防止短路）" },
+  { type: "是非", q: "[是非] 單心線的外皮必須剝除，內部銅線才會導電？", a: "O" },
+  { type: "選擇", q: "[選擇] 單心線內部的核心材料通常是？", a: "A: 銅 :B: 塑膠", realA: "A: 銅" }
+]},
+            { id: 9, name: "元件9：鍍鋅鐵絲", questions: [
+                { type: "問答", q: "鍍鋅鐵絲常用作急急棒路徑，其「鍍鋅」目的是？", a: "防鏽" },
+                { type: "是非", q: "[是非] 鍍鋅鐵絲硬度較高，折彎後不易變形？", a: "O" },
+                { type: "選擇", q: "[選擇] 鐵絲與銅絲相比，導電性較？", a: "A: 弱 :B: 強", realA: "A: 弱" }
+            ]},
+
+            // --- 工具類 (7格) ---
+            { id: 10, name: "工具1：電烙鐵", questions: [
+                { type: "問答", q: "電烙鐵前端溫度極高，不可觸摸哪一個部分？", a: "金屬發熱管與尖端" },
+                { type: "是非", q: "[是非] 剛插電的電烙鐵可以直接放在木頭桌面上加熱？", a: "X" },
+                { type: "選擇", q: "[選擇] 正確放置烙鐵的工具稱為？", a: "A: 烙鐵架 :B: 鉛筆盒", realA: "A: 烙鐵架" }
+            ]},
+            { id: 11, name: "工具2：銲錫", questions: [
+                { type: "問答", q: "銲錫絲內含有的「松香」核心具有什麼功能？", a: "助焊/清潔氧化層" },
+                { type: "是非", q: "[是非] 銲錫熔化後冷卻速度快，需等待十分鐘？", a: "X" },
+                { type: "選擇", q: "[選擇] 銲錫是利用什麼原理固定電子零件？", a: "A: 熔化冷卻 :B: 膠水黏貼", realA: "A: 熔化冷卻" }
+            ]},
+            { id: 12, name: "工具3：剝線鉗", questions: [
+                { type: "問答", q: "使用剝線鉗時，應選用適合孔徑才不會傷到什麼？", a: "內部的芯線" },
+                { type: "是非", q: "[是非] 剝線鉗可以用來剪斷加粗的鍍鋅鐵絲？", a: "X" },
+                { type: "選擇", q: "[選擇] 剝線時應先切開？", a: "A: 塑膠外皮 :B: 金屬核心", realA: "A: 塑膠外皮" }
+            ]},
+            { id: 13, name: "工具4：尖嘴鉗", questions: [
+                { type: "問答", q: "尖嘴鉗前端細長，最適合用來調整路徑哪種位置？", a: "狹窄或細微彎曲處" },
+                { type: "是非", q: "[是非] 尖嘴鉗可以用來增加摩擦力以夾牢零件？", a: "O" },
+                { type: "選擇", q: "[選擇] 彎折細導線時，推薦使用？", a: "A: 尖嘴鉗 :B: 線鋸機", realA: "A: 尖嘴鉗" }
+            ]},
+            { id: 14, name: "工具5：斜口鉗", questions: [
+                { type: "問答", q: "斜口鉗主要用於剪斷多餘線頭，刀口應朝向哪裡？", a: "下方(避免線頭彈飛)" },
+                { type: "是非", q: "[是非] 斜口鉗適合用來撥除漆包線的漆層？", a: "X" },
+                { type: "選擇", q: "[選擇] 剪除焊點多餘的線腳應使用？", a: "A: 斜口鉗 :B: 船型開關", realA: "A: 斜口鉗" }
+            ]},
+            { id: 15, name: "工具6：熱融膠", questions: [
+                { type: "問答", q: "熱融膠槍運作時，是利用什麼原理將膠條熔化？", a: "加熱" },
+                { type: "是非", q: "[是非] 熱融膠具有良好的導電性，可用於連接電路？", a: "X" },
+                { type: "選擇", q: "[選擇] 熱融膠槍前端噴嘴溫度？", a: "A: 極高 :B: 常溫", realA: "A: 極高" }
+            ]},
+            { id: 16, name: "工具7：線鋸機", questions: [
+                { type: "問答", q: "在製作急急棒底座時，線鋸機主要用於切割什麼？", a: "木板或底材" },
+                { type: "是非", q: "[是非] 使用線鋸機時應戴上手套以免被鋸片勾住？", a: "X" },
+                { type: "選擇", q: "[選擇] 使用線鋸機切割時，視線應對準？", a: "A: 切割線路 :B: 天花板", realA: "A: 切割線路" }
+            ]},
+
+            // --- 實作與安全類 (9格) ---
+            { id: 17, name: "實作1：剝皮處理", questions: [
+  { type: "問答", q: "剝除單芯線外層塑膠皮的工具是什麼？", a: "剝線鉗" },
+  { type: "是非", q: "[是非] 剝皮時可使用剝線鉗進行處理？", a: "O" },
+  { type: "選擇", q: "[選擇] 剝除單心線外皮的主要目的是為了？", a: "A: 讓內部銅線能導電 :B: 讓電線變漂亮", realA: "A: 讓內部銅線能導電" }
+]},
+            { id: 18, name: "實作2：路徑設計", questions: [
+                { type: "問答", q: "急急棒路徑如果設計得太狹窄，會造成什麼效果？", a: "遊戲難度增加" },
+                { type: "是非", q: "[是非] 路徑鐵絲沒碰到握把圈時，電路是斷路的？", a: "O" },
+                { type: "選擇", q: "[選擇] 握把與路徑接觸時形成的電路是？", a: "A: 閉路 :B: 斷路", realA: "A: 閉路" }
+            ]},
+            { id: 19, name: "實作3：焊點外觀", questions: [
+                { type: "問答", q: "完美的焊點外觀看起來應該像什麼形狀？", a: "火山形(錐形)" },
+                { type: "是非", q: "[是非] 焊點表面粗糙灰暗通常稱為「冷焊」？", a: "O" },
+                { type: "選擇", q: "[選擇] 焊錫過多會形成什麼狀？", a: "A: 圓球狀 :B: 火山狀", realA: "A: 圓球狀" }
+            ]},
+            { id: 20, name: "實作4：測試導通", questions: [
+                { type: "問答", q: "若要檢查電路是否斷路，可使用哪種工具測量？", a: "三用電表" },
+                { type: "是非", q: "[是非] 測量導通時，三用電表應切換至嗶嗶聲檔？", a: "O" },
+                { type: "選擇", q: "[選擇] 嗶嗶聲響起代表電路？", a: "A: 導通 :B: 斷開", realA: "A: 導通" }
+            ]},
+            { id: 21, name: "安全1：預防燙傷", questions: [
+                { type: "問答", q: "若不幸被烙鐵燙傷，應立即執行的急救措施是？", a: "沖、脫、泡、蓋、送" },
+                { type: "是非", q: "[是非] 焊接完成後可用手觸摸剛焊好的接點測試？", a: "X" },
+                { type: "選擇", q: "[選擇] 傳遞電烙鐵給同學時應？", a: "A: 放在烙鐵架上 :B: 直接拿前端遞交", realA: "A: 放在烙鐵架上" }
+            ]},
+            { id: 22, name: "安全2：通風環境", questions: [
+                { type: "問答", q: "焊接時產生的煙霧具有刺激性，應採取什麼預防措施？", a: "保持通風/開啟抽風機" },
+                { type: "是非", q: "[是非] 焊接教室應開啟窗戶以保持空氣流通？", a: "O" },
+                { type: "選擇", q: "[選擇] 焊接時應儘量避開？", a: "A: 直吸煙霧 :B: 呼吸新鮮空氣", realA: "A: 直吸煙霧" }
+            ]},
+            { id: 23, name: "安全3：短路火災", questions: [
+                { type: "問答", q: "發現電池盒冒煙發燙，代表發生了什麼危險？", a: "短路" },
+                { type: "是非", q: "[是非] 發生短路時，應立即拔掉電源或移除電池？", a: "O" },
+                { type: "選擇", q: "[選擇] 離開教室前必須確認所有烙鐵？", a: "A: 插頭已拔除 :B: 保持加熱狀態", realA: "A: 插頭已拔除" }
+            ]},
+            { id: 24, name: "安全4：剪線防護", questions: [
+                { type: "問答", q: "剪斷多餘導線時，應用手遮擋以免線頭彈傷哪裡？", a: "眼睛" },
+                { type: "是非", q: "[是非] 剪線時線頭應朝向地面，以免彈向他人？", a: "O" },
+                { type: "選擇", q: "[選擇] 操作剪線工具時推薦戴上？", a: "A: 護目鏡 :B: 遮光墨鏡", realA: "A: 護目鏡" }
+            ]},
+            { id: 25, name: "實作5：最終測試", questions: [
+                { type: "問答", q: "完成組裝後，必須確認哪一個部分固定牢靠以免鬆脫？", a: "底座與支架" },
+                { type: "是非", q: "[是非] 急急棒握把的鐵環越大，過關難度越高？", a: "X" },
+                { type: "選擇", q: "[選擇] 實作成功的標誌是系統能發出？", a: "A: 聲光警示 :B: 藍芽訊號", realA: "A: 聲光警示" }
+            ]}
+        ];
+
+        let topics = JSON.parse(localStorage.getItem('bingo_topics_v76')) || [...MASTER_TOPICS];
+        let library = JSON.parse(localStorage.getItem('bingo_library_v76')) || {};
+        let currentBoard = [];
+        let currentActiveIdx = null;
+
+        window.onload = () => {
+            initUI();
+            updateLibrarySelect();
+            generateBoard();
+        };
+
+        function initUI() {
+            const idSlider = document.getElementById('idSizeSlider');
+            const cSlider = document.getElementById('cellSizeSlider');
+            idSlider.oninput = () => {
+                document.querySelectorAll('.cell-header-text').forEach(el => el.style.fontSize = idSlider.value + 'px');
+            };
+            cSlider.oninput = () => {
+                document.querySelectorAll('.category-name').forEach(el => el.style.fontSize = cSlider.value + 'px');
+            };
+        }
+
+        function generateBoard() {
+            const size = parseInt(document.getElementById('gridSize').value);
+            const mode = document.getElementById('sortMode').value;
+            const board = document.getElementById('bingoBoard');
+            
+            const currentIdSize = document.getElementById('idSizeSlider').value;
+            const currentCellSize = document.getElementById('cellSizeSlider').value;
+
+            board.innerHTML = '';
+            currentBoard = [];
+
+            let selectedCats = [...topics];
+            if (mode === 'random') {
+                selectedCats.sort(() => Math.random() - 0.5);
+            } else {
+                selectedCats.sort((a, b) => a.id - b.id);
+            }
+            selectedCats = selectedCats.slice(0, size * size);
+
+            board.style.gridTemplateColumns = `repeat(${size}, 1fr)`;
+
+            selectedCats.forEach((cat, i) => {
+                // 將該分類的完整題目陣列存入 currentBoard，而非預選一題
+                currentBoard.push({ ...cat, marked: false });
+
+                const nameParts = cat.name.split('：');
+                const themePart = nameParts[0] || '';
+                const detailPart = nameParts[1] || '';
+
+                const cell = document.createElement('div');
+                cell.className = 'bingo-cell';
+                cell.id = `cell-${i}`;
+                
+                cell.innerHTML = `
+                    <div class="cell-header-text text-blue-500 font-black mb-1 no-print flex items-center gap-1" style="font-size: ${currentIdSize}px">
+                        <span>${cat.id}.</span>
+                        <span>${themePart}</span>
+                    </div>
+                    <span class="category-name font-black text-slate-700 leading-tight" style="font-size: ${currentCellSize}px">${detailPart}</span>
+                    <div class="check-mark">✓</div>
+                `;
+                cell.onclick = () => openModal(i);
+                board.appendChild(cell);
+            });
+        }
+
+        function openModal(idx) {
+            currentActiveIdx = idx;
+            const catData = currentBoard[idx];
+            
+            // 重要：每次點開時，從該分類的題目陣列中隨機抽選一題
+            const qList = catData.questions;
+            const q = qList[Math.floor(Math.random() * qList.length)];
+            
+            document.getElementById('modalCategory').innerText = `【${catData.name}】・${q.type}`;
+            const optionsContainer = document.getElementById('optionsContainer');
+            optionsContainer.innerHTML = ''; 
+            
+            let qText = q.q;
+            
+            // 處理選擇題顯示
+            if (q.type === '選擇' && q.a.includes(':')) {
+                const parts = q.a.split(':');
+                if (parts.length >= 4) {
+                    optionsContainer.innerHTML = `
+                        <div class="flex justify-center gap-8">
+                            <div class="bg-slate-50 border-4 border-slate-200 px-10 py-6 rounded-[30px] text-[32px] font-black text-slate-600 shadow-sm">
+                                ${parts[0]}: ${parts[1].trim()}
+                            </div>
+                            <div class="bg-slate-50 border-4 border-slate-200 px-10 py-6 rounded-[30px] text-[32px] font-black text-slate-600 shadow-sm">
+                                ${parts[2]}: ${parts[3].trim()}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+
+            document.getElementById('modalQuestion').innerHTML = qText;
+            document.getElementById('modalAnswer').innerText = q.type === '選擇' ? q.realA : q.a;
+            document.getElementById('answerArea').classList.add('hidden');
+            document.getElementById('questionModal').classList.remove('hidden');
+        }
+
+        function showAnswer() {
+            const area = document.getElementById('answerArea');
+            area.classList.remove('hidden');
+            setTimeout(() => area.classList.add('opacity-100'), 10);
+        }
+
+        function markCell(isMark) {
+            const cell = document.getElementById(`cell-${currentActiveIdx}`);
+            if (isMark) cell.classList.add('marked');
+            else cell.classList.remove('marked');
+            closeModal();
+        }
+
+        function closeModal() { document.getElementById('questionModal').classList.add('hidden'); }
+        function confirmReset() {
+            if(confirm("確定清空盤面上所有的勾勾嗎？")) {
+                document.querySelectorAll('.bingo-cell').forEach(c => c.classList.remove('marked'));
+            }
+        }
+
+        function saveToLibrary() {
+            const name = document.getElementById('currentSetName').value.trim();
+            if(!name) return alert("請輸入題組名稱");
+            library[name] = JSON.parse(JSON.stringify(topics));
+            localStorage.setItem('bingo_library_v76', JSON.stringify(library));
+            updateLibrarySelect();
+            alert(`題組「${name}」已儲存至瀏覽器儲存空間。`);
+        }
+
+        function loadFromLibraryBtn() {
+            const name = document.getElementById('librarySelect').value;
+            if(!name) return alert("請先選擇一個題組");
+            topics = JSON.parse(JSON.stringify(library[name]));
+            document.getElementById('currentSetName').value = name;
+            renderEditor();
+        }
+
+        function deleteFromLibraryBtn() {
+            const name = document.getElementById('librarySelect').value;
+            if(!name || !confirm(`確定刪除「${name}」？`)) return;
+            delete library[name];
+            localStorage.setItem('bingo_library_v76', JSON.stringify(library));
+            updateLibrarySelect();
+        }
+
+        function updateLibrarySelect() {
+            const sel = document.getElementById('librarySelect');
+            sel.innerHTML = '<option value="">-- 我的題庫清單 --</option>';
+            Object.keys(library).forEach(name => {
+                const opt = document.createElement('option');
+                opt.value = name; opt.innerText = name; sel.appendChild(opt);
+            });
+        }
+
+        function toggleEditor() {
+            document.getElementById('editorModal').classList.toggle('hidden');
+            if(!document.getElementById('editorModal').classList.contains('hidden')) renderEditor();
+        }
+
+        function renderEditor() {
+            const container = document.getElementById('editorList');
+            container.innerHTML = '';
+            topics.forEach((cat, cIdx) => {
+                const card = document.createElement('div');
+                card.className = 'bg-white p-5 rounded-2xl shadow-sm border border-slate-100 flex flex-col gap-3';
+                card.innerHTML = `
+                    <div class="flex justify-between items-center bg-slate-50 p-2 rounded-lg">
+                        <input type="text" value="${cat.name}" onchange="topics[${cIdx}].name=this.value" class="font-black text-slate-700 outline-none bg-transparent focus:text-blue-600 transition w-full">
+                        <button onclick="topics.splice(${cIdx},1);renderEditor()" class="text-rose-400 text-[10px] uppercase font-bold ml-2">DEL</button>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        ${cat.questions.map((q, qIdx) => `
+                            <div class="p-3 bg-white rounded-xl border border-slate-100 text-[10px]">
+                                <div class="text-indigo-400 font-black mb-1">${q.type}</div>
+                                <textarea onchange="topics[${cIdx}].questions[${qIdx}].q=this.value" class="w-full bg-slate-50 border-none rounded p-1 mb-1 resize-none h-12">${q.q}</textarea>
+                                <input type="text" value="${q.a}" onchange="topics[${cIdx}].questions[${qIdx}].a=this.value" class="w-full bg-transparent border-t border-slate-100 text-slate-400 pt-1">
+                            </div>
+                        `).join('')}
+                    </div>
+                `;
+                container.appendChild(card);
+            });
+        }
+
+        function saveAndClose() {
+            localStorage.setItem('bingo_topics_v76', JSON.stringify(topics));
+            toggleEditor();
+            generateBoard();
+        }
+
+        function restoreDefault() {
+            if(confirm("確定要重設回電流急急棒旗艦題庫嗎？")) {
+                topics = [...MASTER_TOPICS];
+                renderEditor();
+            }
+        }
+
+        function addNewCat() {
+            topics.push({ id: topics.length+1, name:"新類別：自訂內容", questions:[{type:"問答", q:"新問題內容", a:"答案"},{type:"是非", q:"[是非]", a:"O"},{type:"選擇", q:"[選擇] A: :B:", realA:""}] });
+            renderEditor();
+        }
+    </script>
+</body>
+</html>
